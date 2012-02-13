@@ -234,8 +234,8 @@ Response = {
 		
 		-- Parses the raw data and builds the Addr instance
 		parse = function(self)
-			local pos, count
-			pos, self.magic, self.cmd, self.len, self.chksum, count = bin.unpack("<IA12IIC", self.data)
+			local pos, count, unused_padding
+			pos, self.magic, self.cmd, self.len, self.chksum, count, unused_padding = bin.unpack("<IA12IICS", self.data)
 			self.addresses = {}
 			for c=1, count do
 				if ( self.version > 31402 ) then
