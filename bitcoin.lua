@@ -194,7 +194,7 @@ Response = {
 			local pos, ra, sa
 
 			-- After 2012-02-20, version messages contain checksums
-                        if ( os.date("%Y%m%d") >= "20120220" ) then
+			if ( os.date("%Y%m%d") >= "20120220" ) then
 				pos, self.magic, self.cmd, self.len, self.checksum, self.ver_raw, self.service,
 					self.timestamp, ra, sa, self.nodeid,
 					self.subver, self.lastblock = bin.unpack("<IA12IIILLA26A26H8CI", self.data)
@@ -205,11 +205,11 @@ Response = {
 			end
 
 			local function decode_bitcoin_version(n)
-	        		if ( n < 31300 ) then
-	                		local minor, micro = n / 100, n % 100
-	                		return ("0.%d.%d"):format(minor, micro)
-		        	else
-	                		local minor, micro = n / 10000, (n / 100) % 100
+				if ( n < 31300 ) then
+					local minor, micro = n / 100, n % 100
+					return ("0.%d.%d"):format(minor, micro)
+				else
+					local minor, micro = n / 10000, (n / 100) % 100
 					return ("0.%d.%d"):format(minor, micro)
 				end
 			end
@@ -238,7 +238,7 @@ Response = {
 		parse = function(self)
 			local pos
 			-- After 2012-02-20, VerAck messages contain checksums
-                        if ( os.date("%Y%m%d") >= "20120220" ) then
+			if ( os.date("%Y%m%d") >= "20120220" ) then
 				pos, self.magic, self.cmd, self.checksum = bin.unpack("<IA12I", self.data)
 			else
 				pos, self.magic, self.cmd = bin.unpack("<IA12", self.data)
@@ -324,7 +324,7 @@ Response = {
 		local data = ""
 		
 		-- After 2012-02-20, ALL messages contain checksums
-                if ( os.date("%Y%m%d") >= "20120220" ) then
+		if ( os.date("%Y%m%d") >= "20120220" ) then
 			len = len + 4
 		else
 			if ( cmd ~= "version\0\0\0\0\0" and cmd ~= "verack\0\0\0\0\0\0") then
@@ -381,8 +381,8 @@ BCSocket =
 			port = port,
 			timeout = "table" == type(options) and options.timeout or 10000
 		}
-       	setmetatable(o, self)
-        self.__index = self
+		setmetatable(o, self)
+		self.__index = self
 		o.Socket = nmap.new_socket()
 		o.Buffer = nil
 		return o
@@ -482,11 +482,11 @@ Helper = {
 		if ( not(self.socket) ) then
 			return false
 		end
-
+		
 		local req = Request.Version:new(
 			self.host, self.port, self.lhost, self.lport
 		)
-
+		
 		local status, err = self.socket:send(tostring(req))
 		if ( not(status) ) then
 			return false, "Failed to send \"Version\" request to server"
@@ -511,7 +511,7 @@ Helper = {
 		local req = Request.GetAddr:new(
 			self.host, self.port, self.lhost, self.lport
 		)
-
+		
 		local status, err = self.socket:send(tostring(req))
 		if ( not(status) ) then
 			return false, "Failed to send \"Version\" request to server"
