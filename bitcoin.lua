@@ -114,11 +114,26 @@ Request = {
 			local ra = NetworkAddress:new(self.host, self.port)
 			local sa = NetworkAddress:new(self.lhost, self.lport)
 			local nodeid = openssl.rand_bytes(8)
-			local subver = "\0"
+			local useragent = "\0"
 			local lastblock = 0
+
+			-- Construct payload in order to calculate checksum for the header
+			local payload = bin.pack("<ILLAAAAI", ver, services, timestamp,
+				tostring(ra), tostring(sa), nodeid, useragent, lastblock)
+
+			-- Checksum is first 4 bytes of sha256(sha256(payload))
+			local checksum = openssl.digest("sha256", payload)
+			checksum = openssl.digest("sha256", payload)
+		
+			-- Construct the header without checksum
+			local header = bin.pack("<IAI", magic, cmd, len)	
 			
-			return bin.pack("<IAIILLAAAAI", magic, cmd, len, ver, services,
-				timestamp, tostring(ra), tostring(sa), nodeid, subver, lastblock)
+			-- After 2012-02-20, version messages require checksums
+			if ( os.date("%Y%m%d") >= "20120220" ) then 
+				header = header .. bin.pack("<z", string.sub(checksum, 1, 4))
+			end
+		
+			return header .. payload
 		end,
 	},
 	
@@ -177,20 +192,28 @@ Response = {
 		-- Parses the raw data and builds the Version instance
 		parse = function(self)
 			local pos, ra, sa
-			pos, self.magic, self.cmd, self.len, self.ver_raw, self.service,
-				self.timestamp, ra, sa, self.nodeid,
-				self.subver, self.lastblock = bin.unpack("<IA12IILLA26A26H8CI", self.data)
-			
+
+			-- After 2012-02-20, version messages contain checksums
+                        if ( os.date("%Y%m%d") >= "20120220" ) then
+				pos, self.magic, self.cmd, self.len, self.checksum, self.ver_raw, self.service,
+					self.timestamp, ra, sa, self.nodeid,
+					self.subver, self.lastblock = bin.unpack("<IA12IIILLA26A26H8CI", self.data)
+			else
+				pos, self.magic, self.cmd, self.len, self.ver_raw, self.service,
+					self.timestamp, ra, sa, self.nodeid,
+					self.subver, self.lastblock = bin.unpack("<IA12IILLA26A26H8CI", self.data)
+			end
+
 			local function decode_bitcoin_version(n)
-	        	if ( n < 31300 ) then
-	                local minor, micro = n / 100, n % 100
-	                return ("0.%d.%d"):format(minor, micro)
-		        else
-	                local minor, micro = n / 10000, (n / 100) % 100
-				    return ("0.%d.%d"):format(minor, micro)
+	        		if ( n < 31300 ) then
+	                		local minor, micro = n / 100, n % 100
+	                		return ("0.%d.%d"):format(minor, micro)
+		        	else
+	                		local minor, micro = n / 10000, (n / 100) % 100
+					return ("0.%d.%d"):format(minor, micro)
 				end
 			end
-			
+		
 			self.ver = decode_bitcoin_version(self.ver_raw)
 			self.sa = NetworkAddress.fromString(sa)
 			self.ra = NetworkAddress.fromString(ra)
@@ -214,7 +237,12 @@ Response = {
 		-- Parses the raw data and builds the VerAck instance
 		parse = function(self)
 			local pos
-			pos, self.magic, self.cmd = bin.unpack("<IA12", self.data)
+			-- After 2012-02-20, VerAck messages contain checksums
+                        if ( os.date("%Y%m%d") >= "20120220" ) then
+				pos, self.magic, self.cmd, self.checksum = bin.unpack("<IA12I", self.data)
+			else
+				pos, self.magic, self.cmd = bin.unpack("<IA12", self.data)
+			end
 		end,		
 	},
 
@@ -234,8 +262,18 @@ Response = {
 		
 		-- Parses the raw data and builds the Addr instance
 		parse = function(self)
-			local pos, count, unused_padding
-			pos, self.magic, self.cmd, self.len, self.chksum, count, unused_padding = bin.unpack("<IA12IICS", self.data)
+			local pos, count
+			pos, self.magic, self.cmd, self.len, self.chksum, count = bin.unpack("<IA12IIC", self.data)
+			
+			-- Handles count as a variable length integer
+			if ( count == 0xfd ) then
+				pos, count = bin.unpack("<S", self.data, pos)
+			elseif ( count == 0xfe ) then
+				pos, count = bin.unpack("<I", self.data, pos)
+			elseif ( count == 0xff ) then
+				pos, count = bin.unpack("<L", self.data, pos)
+			end
+			
 			self.addresses = {}
 			for c=1, count do
 				if ( self.version > 31402 ) then
@@ -285,8 +323,13 @@ Response = {
 		local pos, magic, cmd, len = bin.unpack("<IA12I", header)
 		local data = ""
 		
-		if ( cmd ~= "version\0\0\0\0\0" and cmd ~= "verack\0\0\0\0\0\0") then
+		-- After 2012-02-20, ALL messages contain checksums
+                if ( os.date("%Y%m%d") >= "20120220" ) then
 			len = len + 4
+		else
+			if ( cmd ~= "version\0\0\0\0\0" and cmd ~= "verack\0\0\0\0\0\0") then
+				len = len + 4
+			end
 		end
 		
 		-- the verack has no payload
