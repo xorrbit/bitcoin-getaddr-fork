@@ -20,12 +20,17 @@
 --
 -- * Helper - The primary interface to scripts
 --
+--@author Patrik Karlsson <patrik@cqure.net>
+--@author Andrew Orr <andrew@andreworr.ca>
+--@copyright Same as Nmap--See http://nmap.org/book/man-legal.html
 
 --
--- Version 0.1
+-- Version 0.2
 -- 
 -- Created 11/09/2011 - v0.1 - created by Patrik Karlsson <patrik@cqure.net>
---
+-- Revised 17/02/2012 - v0.2 - fixed count parsing
+--                           - changed version/verack handling to support
+--                             February 20th 2012 bitcoin protocol switchover
 
 module(... or "bitcoin", package.seeall)
 
@@ -129,9 +134,7 @@ Request = {
 			local header = bin.pack("<IAI", magic, cmd, len)	
 			
 			-- After 2012-02-20, version messages require checksums
-			if ( os.date("%Y%m%d") >= "20120220" ) then 
-				header = header .. bin.pack("<z", string.sub(checksum, 1, 4))
-			end
+			header = header .. bin.pack("<z", string.sub(checksum, 1, 4))
 		
 			return header .. payload
 		end,
@@ -194,16 +197,10 @@ Response = {
 			local pos, ra, sa
 
 			-- After 2012-02-20, version messages contain checksums
-			if ( os.date("%Y%m%d") >= "20120220" ) then
-				pos, self.magic, self.cmd, self.len, self.checksum, self.ver_raw, self.service,
-					self.timestamp, ra, sa, self.nodeid,
-					self.subver, self.lastblock = bin.unpack("<IA12IIILLA26A26H8CI", self.data)
-			else
-				pos, self.magic, self.cmd, self.len, self.ver_raw, self.service,
-					self.timestamp, ra, sa, self.nodeid,
-					self.subver, self.lastblock = bin.unpack("<IA12IILLA26A26H8CI", self.data)
-			end
-
+			pos, self.magic, self.cmd, self.len, self.checksum, self.ver_raw, self.service,
+				self.timestamp, ra, sa, self.nodeid,
+				self.subver, self.lastblock = bin.unpack("<IA12IIILLA26A26H8CI", self.data)
+			
 			local function decode_bitcoin_version(n)
 				if ( n < 31300 ) then
 					local minor, micro = n / 100, n % 100
@@ -238,12 +235,8 @@ Response = {
 		parse = function(self)
 			local pos
 			-- After 2012-02-20, VerAck messages contain checksums
-			if ( os.date("%Y%m%d") >= "20120220" ) then
-				pos, self.magic, self.cmd, self.checksum = bin.unpack("<IA12I", self.data)
-			else
-				pos, self.magic, self.cmd = bin.unpack("<IA12", self.data)
-			end
-		end,		
+			pos, self.magic, self.cmd, self.checksum = bin.unpack("<IA12I", self.data)
+		end,
 	},
 
 	-- The Addr response message
@@ -315,22 +308,13 @@ Response = {
 	-- @return response instance of response packet if status is true
 	--         err string containing the error message if status is false
 	recvPacket = function(socket, version)
-		local status, header = socket:recv(20)
+		local status, header = socket:recv(24)
 		if ( not(status) ) then
 			return false, "Failed to read the packet header"
 		end
 		
-		local pos, magic, cmd, len = bin.unpack("<IA12I", header)
+		local pos, magic, cmd, len, checksum = bin.unpack("<IA12II", header)
 		local data = ""
-		
-		-- After 2012-02-20, ALL messages contain checksums
-		if ( os.date("%Y%m%d") >= "20120220" ) then
-			len = len + 4
-		else
-			if ( cmd ~= "version\0\0\0\0\0" and cmd ~= "verack\0\0\0\0\0\0") then
-				len = len + 4
-			end
-		end
 		
 		-- the verack has no payload
 		if ( 0 ~= len ) then
